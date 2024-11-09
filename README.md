@@ -17,6 +17,15 @@ Whether he's managing a bustling medicine inventory or orchestrating hospital op
 - **AI-Powered Chatbot:** Engage with a medical chatbot powered by the HuggingChat API for instant assistance. It's like having a really smart, really fast-typing nurse at your fingertips!
 - **Responsive UI:** Enjoy a user-friendly interface with a modern and sleek design. Because even hospital software deserves to look good!
 
+#### Hospital Management System Screenshots
+*Dashboard showcasing patient, doctor, and appointment management*
+
+![image](https://github.com/user-attachments/assets/3739386d-11e9-4215-83f8-a951a31e9dbc)
+
+*The AI-powered chatbot interface for instant assistance*
+
+![image](https://github.com/user-attachments/assets/d276427d-2c7d-47fc-b221-1f325dce3e9e)
+
 ### 💊 Medicine Inventory Management System
 - **Add & Manage Medicines:** Easily add, update, and delete medicine records. Keeping track of pills has never been this thrilling!
 - **Categorization:** Organize medicines by predefined categories and manufacturers. It's like a wardrobe organizer, but for drugs (the legal kind)!
@@ -24,6 +33,17 @@ Whether he's managing a bustling medicine inventory or orchestrating hospital op
 - **Expiry Notifications:** Get notified about expired medicines to ensure inventory quality. Because nobody likes stale pills!
 - **Analytics Dashboard:** Visualize inventory data with insightful charts and graphs. Impress everyone with your data-driven decision-making skills!
 - **GitHub Integration:** Quick access to project updates via a clickable GitHub logo. Show off your tech-savviness with just one click!
+
+*Dashboard for managing medicines and tracking inventory analytics*
+![image](https://github.com/user-attachments/assets/cdbbac50-b027-4b05-b5c2-2199f04bccd0)
+
+![image](https://github.com/user-attachments/assets/40a9c0fe-7bc9-4292-ab0f-8d31e060050d)
+
+*Example of low stock and expiry notifications for inventory management*
+![image](https://github.com/user-attachments/assets/3abac362-d610-4ef0-ba51-54caac8ca02e)
+
+*Realtime analytics of inventory*
+![image](https://github.com/user-attachments/assets/d8ed1d9a-ee44-4b04-ae66-6db5f2c21983)
 
 ## Installation
 
