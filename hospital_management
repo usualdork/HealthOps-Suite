@@ -1,0 +1,807 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
+import sqlite3
+from datetime import datetime
+import re
+from hugchat import hugchat
+from hugchat.login import Login
+from PIL import Image, ImageTk
+
+
+# Initialize HuggingChat Authentication
+EMAIL = "Enter Your Email"
+PASSWD = "Enter Password"
+cookie_path_dir = "./cookies/"
+sign = Login(EMAIL, PASSWD)
+cookies = sign.login(cookie_dir_path=cookie_path_dir, save_cookies=True)
+chatbot = hugchat.ChatBot(cookies=cookies.get_dict())
+
+# Function to fetch response from HuggingChat
+def query_huggingchat_api(query):
+    try:
+        message_result = chatbot.chat(query)
+        response = message_result.wait_until_done()
+        return response
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# Tkinter function for chatbot interaction
+def open_chatbot():
+    query = simpledialog.askstring("Medical Chatbot", "How can I assist you today?")
+    if query:
+        response = query_huggingchat_api(query)
+        messagebox.showinfo("Chatbot Response", response)
+
+
+class HospitalManagementSystem:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Hospital Management System")
+        self.root.geometry("1200x700")
+        # Update root background to light blue in __init__
+        self.root.configure(bg="#e6f2ff")  # Soft gradient or light blue background
+
+        # Add the chatbot button
+        chatbot_button = tk.Button(self.root, text="Ask Medical Chatbot", command=open_chatbot, bg='#FF0000')
+        chatbot_button.pack(pady=50)
+        # Create loading label (always visible below the button)
+        self.loading_label = tk.Label(
+            self.root,
+            text="AI might take up to 45 seconds to respond to your query",
+            font=("Arial", 10, "italic"),
+            fg="#000000"
+        )
+        self.loading_label.pack(pady=10) 
+
+        # Set the hospital cross as the window icon
+        self.root.iconbitmap("Path to icon")  # Optional window icon
+
+        # Load the hospital cross image
+        self.cross_image = Image.open("Path to image")  # Replace with your image path
+        self.cross_image = self.cross_image.resize((250, 200), Image.ANTIALIAS)  # Resize if necessary
+        self.cross_photo = ImageTk.PhotoImage(self.cross_image)
+
+        # Display the image at the top left inside the window
+        self.cross_label = tk.Label(self.root, image=self.cross_photo)
+        self.cross_label.place(x=10, y=10)  # Adjust x, y for positioning
+
+
+        # Initialize Database
+        self.create_database()
+        
+        # Create main notebook for tabs
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(pady=10, expand=True)
+        
+        # Create tabs
+        self.patient_tab = ttk.Frame(self.notebook)
+        self.appointment_tab = ttk.Frame(self.notebook)
+        self.doctor_tab = ttk.Frame(self.notebook)
+        
+        self.notebook.add(self.patient_tab, text="Patient Management")
+        self.notebook.add(self.appointment_tab, text="Appointments")
+        self.notebook.add(self.doctor_tab, text="Doctor Management")
+        
+        # Initialize all tabs
+        self.setup_patient_tab()
+        self.setup_appointment_tab()
+        self.setup_doctor_tab()
+
+    def create_database(self):
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        
+        # Create Patient table
+        c.execute('''CREATE TABLE IF NOT EXISTS patients
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     name TEXT NOT NULL,
+                     age INTEGER,
+                     gender TEXT,
+                     phone TEXT,
+                     address TEXT,
+                     medical_history TEXT)''')
+        
+        # Create Doctor table
+        c.execute('''CREATE TABLE IF NOT EXISTS doctors
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     name TEXT NOT NULL,
+                     specialization TEXT,
+                     phone TEXT,
+                     email TEXT)''')
+        
+        # Create Appointment table
+        c.execute('''CREATE TABLE IF NOT EXISTS appointments
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     patient_id INTEGER,
+                     doctor_id INTEGER,
+                     date TEXT,
+                     time TEXT,
+                     status TEXT,
+                     FOREIGN KEY (patient_id) REFERENCES patients (id),
+                     FOREIGN KEY (doctor_id) REFERENCES doctors (id))''')
+        
+        conn.commit()
+        conn.close()
+
+    def setup_patient_tab(self):
+        # Patient Information Frame
+        patient_info_frame = ttk.LabelFrame(self.patient_tab, text="Patient Information")
+        patient_info_frame.grid(row=0, column=0, padx=20, pady=10, sticky="nsew")
+
+        # Patient Entry Fields
+        ttk.Label(patient_info_frame, text="Name:").grid(row=0, column=0, padx=5, pady=5)
+        self.patient_name = ttk.Entry(patient_info_frame)
+        self.patient_name.grid(row=0, column=1, padx=5, pady=5)
+
+        ttk.Label(patient_info_frame, text="Age:").grid(row=1, column=0, padx=5, pady=5)
+        self.patient_age = ttk.Entry(patient_info_frame)
+        self.patient_age.grid(row=1, column=1, padx=5, pady=5)
+
+        ttk.Label(patient_info_frame, text="Gender:").grid(row=2, column=0, padx=5, pady=5)
+        self.patient_gender = ttk.Combobox(patient_info_frame, values=["Male", "Female", "Other"])
+        self.patient_gender.grid(row=2, column=1, padx=5, pady=5)
+
+        ttk.Label(patient_info_frame, text="Phone:").grid(row=3, column=0, padx=5, pady=5)
+        self.patient_phone = ttk.Entry(patient_info_frame)
+        self.patient_phone.grid(row=3, column=1, padx=5, pady=5)
+
+        ttk.Label(patient_info_frame, text="Address:").grid(row=4, column=0, padx=5, pady=5)
+        self.patient_address = ttk.Entry(patient_info_frame)
+        self.patient_address.grid(row=4, column=1, padx=5, pady=5)
+
+        ttk.Label(patient_info_frame, text="Medical History:").grid(row=5, column=0, padx=5, pady=5)
+        self.patient_history = tk.Text(patient_info_frame, height=3, width=30)
+        self.patient_history.grid(row=5, column=1, padx=5, pady=5)
+
+        # Buttons
+        button_frame = ttk.Frame(patient_info_frame)
+        button_frame.grid(row=6, column=0, columnspan=2, pady=10)
+
+        ttk.Button(button_frame, text="Add Patient", command=self.add_patient).grid(row=0, column=0, padx=5)
+        ttk.Button(button_frame, text="Update Patient", command=self.update_patient).grid(row=0, column=1, padx=5)
+        ttk.Button(button_frame, text="Delete Patient", command=self.delete_patient).grid(row=0, column=2, padx=5)
+
+        # Patient List
+        list_frame = ttk.LabelFrame(self.patient_tab, text="Patient List")
+        list_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew")
+
+        self.patient_tree = ttk.Treeview(list_frame, columns=("ID", "Name", "Age", "Gender", "Phone"))
+        self.patient_tree.heading("ID", text="ID")
+        self.patient_tree.heading("Name", text="Name")
+        self.patient_tree.heading("Age", text="Age")
+        self.patient_tree.heading("Gender", text="Gender")
+        self.patient_tree.heading("Phone", text="Phone")
+        self.patient_tree.column("#0", width=0, stretch=tk.NO)
+        self.patient_tree.grid(row=0, column=0, padx=5, pady=5)
+
+        # Bind select event
+        self.patient_tree.bind('<<TreeviewSelect>>', self.select_patient)
+        
+        # Load patient data
+        self.load_patient_data()
+
+    def setup_appointment_tab(self):
+        # Appointment Information Frame
+        appointment_info_frame = ttk.LabelFrame(self.appointment_tab, text="Appointment Information")
+        appointment_info_frame.grid(row=0, column=0, padx=20, pady=10, sticky="nsew")
+
+        # Appointment Entry Fields
+        ttk.Label(appointment_info_frame, text="Patient:").grid(row=0, column=0, padx=5, pady=5)
+        self.appointment_patient = ttk.Combobox(appointment_info_frame)
+        self.appointment_patient.grid(row=0, column=1, padx=5, pady=5)
+
+        ttk.Label(appointment_info_frame, text="Doctor:").grid(row=1, column=0, padx=5, pady=5)
+        self.appointment_doctor = ttk.Combobox(appointment_info_frame)
+        self.appointment_doctor.grid(row=1, column=1, padx=5, pady=5)
+
+        ttk.Label(appointment_info_frame, text="Date:").grid(row=2, column=0, padx=5, pady=5)
+        self.appointment_date = ttk.Entry(appointment_info_frame)
+        self.appointment_date.grid(row=2, column=1, padx=5, pady=5)
+        self.appointment_date.insert(0, "YYYY-MM-DD")
+
+        ttk.Label(appointment_info_frame, text="Time:").grid(row=3, column=0, padx=5, pady=5)
+        self.appointment_time = ttk.Entry(appointment_info_frame)
+        self.appointment_time.grid(row=3, column=1, padx=5, pady=5)
+        self.appointment_time.insert(0, "HH:MM")
+
+        ttk.Label(appointment_info_frame, text="Status:").grid(row=4, column=0, padx=5, pady=5)
+        self.appointment_status = ttk.Combobox(appointment_info_frame, 
+                                             values=["Scheduled", "Completed", "Cancelled"])
+        self.appointment_status.grid(row=4, column=1, padx=5, pady=5)
+
+        # Buttons
+        button_frame = ttk.Frame(appointment_info_frame)
+        button_frame.grid(row=5, column=0, columnspan=2, pady=10)
+
+        ttk.Button(button_frame, text="Add Appointment", 
+                  command=self.add_appointment).grid(row=0, column=0, padx=5)
+        ttk.Button(button_frame, text="Update Appointment", 
+                  command=self.update_appointment).grid(row=0, column=1, padx=5)
+        ttk.Button(button_frame, text="Delete Appointment", 
+                  command=self.delete_appointment).grid(row=0, column=2, padx=5)
+
+        # Appointment List
+        list_frame = ttk.LabelFrame(self.appointment_tab, text="Appointment List")
+        list_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew")
+
+        self.appointment_tree = ttk.Treeview(list_frame, 
+                                           columns=("ID", "Patient", "Doctor", "Date", "Time", "Status"))
+        self.appointment_tree.heading("ID", text="ID")
+        self.appointment_tree.heading("Patient", text="Patient")
+        self.appointment_tree.heading("Doctor", text="Doctor")
+        self.appointment_tree.heading("Date", text="Date")
+        self.appointment_tree.heading("Time", text="Time")
+        self.appointment_tree.heading("Status", text="Status")
+        self.appointment_tree.column("#0", width=0, stretch=tk.NO)
+        self.appointment_tree.grid(row=0, column=0, padx=5, pady=5)
+
+        # Bind select event
+        self.appointment_tree.bind('<<TreeviewSelect>>', self.select_appointment)
+        
+        # Load appointment data
+        self.load_appointment_data()
+        self.update_patient_doctor_lists()
+
+    def setup_doctor_tab(self):
+        # Doctor Information Frame
+        doctor_info_frame = ttk.LabelFrame(self.doctor_tab, text="Doctor Information")
+        doctor_info_frame.grid(row=0, column=0, padx=20, pady=10, sticky="nsew")
+
+        # Doctor Entry Fields
+        ttk.Label(doctor_info_frame, text="Name:").grid(row=0, column=0, padx=5, pady=5)
+        self.doctor_name = ttk.Entry(doctor_info_frame)
+        self.doctor_name.grid(row=0, column=1, padx=5, pady=5)
+
+        ttk.Label(doctor_info_frame, text="Specialization:").grid(row=1, column=0, padx=5, pady=5)
+        self.doctor_specialization = ttk.Entry(doctor_info_frame)
+        self.doctor_specialization.grid(row=1, column=1, padx=5, pady=5)
+
+        ttk.Label(doctor_info_frame, text="Phone:").grid(row=2, column=0, padx=5, pady=5)
+        self.doctor_phone = ttk.Entry(doctor_info_frame)
+        self.doctor_phone.grid(row=2, column=1, padx=5, pady=5)
+
+        ttk.Label(doctor_info_frame, text="Email:").grid(row=3, column=0, padx=5, pady=5)
+        self.doctor_email = ttk.Entry(doctor_info_frame)
+        self.doctor_email.grid(row=3, column=1, padx=5, pady=5)
+
+        # Buttons
+        button_frame = ttk.Frame(doctor_info_frame)
+        button_frame.grid(row=4, column=0, columnspan=2, pady=10)
+
+        ttk.Button(button_frame, text="Add Doctor", 
+                  command=self.add_doctor).grid(row=0, column=0, padx=5)
+        ttk.Button(button_frame, text="Update Doctor", 
+                  command=self.update_doctor).grid(row=0, column=1, padx=5)
+        ttk.Button(button_frame, text="Delete Doctor", 
+                  command=self.delete_doctor).grid(row=0, column=2, padx=5)
+
+        # Doctor List
+        list_frame = ttk.LabelFrame(self.doctor_tab, text="Doctor List")
+        list_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew")
+
+        self.doctor_tree = ttk.Treeview(list_frame, 
+                                      columns=("ID", "Name", "Specialization", "Phone", "Email"))
+        self.doctor_tree.heading("ID", text="ID")
+        self.doctor_tree.heading("Name", text="Name")
+        self.doctor_tree.heading("Specialization", text="Specialization")
+        self.doctor_tree.heading("Phone", text="Phone")
+        self.doctor_tree.heading("Email", text="Email")
+        self.doctor_tree.column("#0", width=0, stretch=tk.NO)
+        self.doctor_tree.grid(row=0, column=0, padx=5, pady=5)
+
+        # Bind select event
+        self.doctor_tree.bind('<<TreeviewSelect>>', self.select_doctor)
+        
+        # Load doctor data
+        self.load_doctor_data()
+
+    # Patient Management Methods
+    def add_patient(self):
+        name = self.patient_name.get()
+        age = self.patient_age.get()
+        gender = self.patient_gender.get()
+        phone = self.patient_phone.get()
+        address = self.patient_address.get()
+        history = self.patient_history.get("1.0", tk.END).strip()
+
+        if not all([name, age, gender, phone]):
+            messagebox.showerror("Error", "Please fill in all required fields")
+            return
+
+        try:
+            age = int(age)
+            if not (0 <= age <= 150):
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid age")
+            return
+
+        if not re.match(r'^\d{10}$', phone):
+            messagebox.showerror("Error", "Please enter a valid 10-digit phone number")
+            return
+
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute('''INSERT INTO patients (name, age, gender, phone, address, medical_history)
+                    VALUES (?, ?, ?, ?, ?, ?)''', 
+                 (name, age, gender, phone, address, history))
+        conn.commit()
+        conn.close()
+
+        self.clear_patient_fields()
+        self.load_patient_data()
+        messagebox.showinfo("Success", "Patient added successfully")
+
+    def update_patient(self):
+        selected = self.patient_tree.selection()
+        if not selected:
+            messagebox.showerror("Error", "Please select a patient to update")
+            return
+
+        patient_id = self.patient_tree.item(selected)['values'][0]
+        name = self.patient_name.get()
+        age = self.patient_age.get()
+        gender = self.patient_gender.get()
+        phone = self.patient_phone.get()
+        address = self.patient_address.get()
+        history = self.patient_history.get("1.0", tk.END).strip()
+
+        try:
+            age = int(age)
+            if not (0 <= age <= 150):
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid age")
+            return
+
+        if not re.match(r'^\d{10}$', phone):
+            messagebox.showerror("Error", "Please enter a valid 10-digit phone number")
+            return
+
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute('''UPDATE patients 
+                    SET name=?, age=?, gender=?, phone=?, address=?, medical_history=?
+                    WHERE id=?''', 
+                 (name, age, gender, phone, address, history, patient_id))
+        conn.commit()
+        conn.close()
+
+        self.clear_patient_fields()
+        self.load_patient_data()
+        messagebox.showinfo("Success", "Patient updated successfully")
+
+    def delete_patient(self):
+        selected = self.patient_tree.selection()
+        if not selected:
+            messagebox.showerror("Error", "Please select a patient to delete")
+            return
+
+        if messagebox.askyesno("Confirm", "Are you sure you want to delete this patient?"):
+            patient_id = self.patient_tree.item(selected)['values'][0]
+            
+            conn = sqlite3.connect('hospital.db')
+            c = conn.cursor()
+            # First delete related appointments
+            c.execute("DELETE FROM appointments WHERE patient_id=?", (patient_id,))
+            # Then delete the patient
+            c.execute("DELETE FROM patients WHERE id=?", (patient_id,))
+            conn.commit()
+            conn.close()
+
+            self.clear_patient_fields()
+            self.load_patient_data()
+            self.load_appointment_data()
+            messagebox.showinfo("Success", "Patient deleted successfully")
+
+    def select_patient(self, event):
+        selected = self.patient_tree.selection()
+        if not selected:
+            return
+
+        # Clear current fields
+        self.clear_patient_fields()
+
+        # Get patient data
+        patient_id = self.patient_tree.item(selected)['values'][0]
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute("SELECT * FROM patients WHERE id=?", (patient_id,))
+        patient = c.fetchone()
+        conn.close()
+
+        # Fill fields with patient data
+        self.patient_name.insert(0, patient[1])
+        self.patient_age.insert(0, patient[2])
+        self.patient_gender.set(patient[3])
+        self.patient_phone.insert(0, patient[4])
+        self.patient_address.insert(0, patient[5] if patient[5] else "")
+        self.patient_history.insert("1.0", patient[6] if patient[6] else "")
+
+    def load_patient_data(self):
+        # Clear current view
+        for item in self.patient_tree.get_children():
+            self.patient_tree.delete(item)
+
+        # Load data from database
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute("SELECT id, name, age, gender, phone FROM patients")
+        for row in c.fetchall():
+            self.patient_tree.insert("", "end", values=row)
+        conn.close()
+
+    def clear_patient_fields(self):
+        self.patient_name.delete(0, tk.END)
+        self.patient_age.delete(0, tk.END)
+        self.patient_gender.set("")
+        self.patient_phone.delete(0, tk.END)
+        self.patient_address.delete(0, tk.END)
+        self.patient_history.delete("1.0", tk.END)
+
+    # Doctor Management Methods
+    def add_doctor(self):
+        name = self.doctor_name.get()
+        specialization = self.doctor_specialization.get()
+        phone = self.doctor_phone.get()
+        email = self.doctor_email.get()
+
+        if not all([name, specialization, phone, email]):
+            messagebox.showerror("Error", "Please fill in all fields")
+            return
+
+        if not re.match(r'^\d{10}$', phone):
+            messagebox.showerror("Error", "Please enter a valid 10-digit phone number")
+            return
+
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            messagebox.showerror("Error", "Please enter a valid email address")
+            return
+
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute('''INSERT INTO doctors (name, specialization, phone, email)
+                    VALUES (?, ?, ?, ?)''', 
+                 (name, specialization, phone, email))
+        conn.commit()
+        conn.close()
+
+        self.clear_doctor_fields()
+        self.load_doctor_data()
+        self.update_patient_doctor_lists()
+        messagebox.showinfo("Success", "Doctor added successfully")
+
+    def update_doctor(self):
+        selected = self.doctor_tree.selection()
+        if not selected:
+            messagebox.showerror("Error", "Please select a doctor to update")
+            return
+
+        doctor_id = self.doctor_tree.item(selected)['values'][0]
+        name = self.doctor_name.get()
+        specialization = self.doctor_specialization.get()
+        phone = self.doctor_phone.get()
+        email = self.doctor_email.get()
+
+        if not re.match(r'^\d{10}$', phone):
+            messagebox.showerror("Error", "Please enter a valid 10-digit phone number")
+            return
+
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            messagebox.showerror("Error", "Please enter a valid email address")
+            return
+
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute('''UPDATE doctors 
+                    SET name=?, specialization=?, phone=?, email=?
+                    WHERE id=?''', 
+                 (name, specialization, phone, email, doctor_id))
+        conn.commit()
+        conn.close()
+
+        self.clear_doctor_fields()
+        self.load_doctor_data()
+        self.update_patient_doctor_lists()
+        messagebox.showinfo("Success", "Doctor updated successfully")
+
+    def delete_doctor(self):
+        selected = self.doctor_tree.selection()
+        if not selected:
+            messagebox.showerror("Error", "Please select a doctor to delete")
+            return
+
+        if messagebox.askyesno("Confirm", "Are you sure you want to delete this doctor?"):
+            doctor_id = self.doctor_tree.item(selected)['values'][0]
+            
+            conn = sqlite3.connect('hospital.db')
+            c = conn.cursor()
+            # First delete related appointments
+            c.execute("DELETE FROM appointments WHERE doctor_id=?", (doctor_id,))
+            # Then delete the doctor
+            c.execute("DELETE FROM doctors WHERE id=?", (doctor_id,))
+            conn.commit()
+            conn.close()
+
+            self.clear_doctor_fields()
+            self.load_doctor_data()
+            self.load_appointment_data()
+            self.update_patient_doctor_lists()
+            messagebox.showinfo("Success", "Doctor deleted successfully")
+
+    def select_doctor(self, event):
+        selected = self.doctor_tree.selection()
+        if not selected:
+            return
+
+        # Clear current fields
+        self.clear_doctor_fields()
+
+        # Get doctor data
+        doctor_id = self.doctor_tree.item(selected)['values'][0]
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute("SELECT * FROM doctors WHERE id=?", (doctor_id,))
+        doctor = c.fetchone()
+        conn.close()
+
+        # Fill fields with doctor data
+        self.doctor_name.insert(0, doctor[1])
+        self.doctor_specialization.insert(0, doctor[2])
+        self.doctor_phone.insert(0, doctor[3])
+        self.doctor_email.insert(0, doctor[4])
+
+    def load_doctor_data(self):
+        # Clear current view
+        for item in self.doctor_tree.get_children():
+            self.doctor_tree.delete(item)
+
+        # Load data from database
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute("SELECT * FROM doctors")
+        for row in c.fetchall():
+            self.doctor_tree.insert("", "end", values=row)
+        conn.close()
+
+    def clear_doctor_fields(self):
+        self.doctor_name.delete(0, tk.END)
+        self.doctor_specialization.delete(0, tk.END)
+        self.doctor_phone.delete(0, tk.END)
+        self.doctor_email.delete(0, tk.END)
+
+    # Appointment Management Methods
+    def add_appointment(self):
+        patient = self.appointment_patient.get()
+        doctor = self.appointment_doctor.get()
+        date = self.appointment_date.get()
+        time = self.appointment_time.get()
+        status = self.appointment_status.get()
+
+        if not all([patient, doctor, date, time, status]):
+            messagebox.showerror("Error", "Please fill in all fields")
+            return
+
+        try:
+            datetime.strptime(date, '%Y-%m-%d')
+            datetime.strptime(time, '%H:%M')
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid date (YYYY-MM-DD) and time (HH:MM)")
+            return
+
+        # Get IDs from names
+        patient_id = int(patient.split()[0])
+        doctor_id = int(doctor.split()[0])
+
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute('''INSERT INTO appointments (patient_id, doctor_id, date, time, status)
+                    VALUES (?, ?, ?, ?, ?)''', 
+                 (patient_id, doctor_id, date, time, status))
+        conn.commit()
+        conn.close()
+
+        self.clear_appointment_fields()
+        self.load_appointment_data()
+        messagebox.showinfo("Success", "Appointment added successfully")
+
+    def update_appointment(self):
+        selected = self.appointment_tree.selection()
+        if not selected:
+            messagebox.showerror("Error", "Please select an appointment to update")
+            return
+
+        appointment_id = self.appointment_tree.item(selected)['values'][0]
+        patient = self.appointment_patient.get()
+        doctor = self.appointment_doctor.get()
+        date = self.appointment_date.get()
+        time = self.appointment_time.get()
+        status = self.appointment_status.get()
+
+        try:
+            datetime.strptime(date, '%Y-%m-%d')
+            datetime.strptime(time, '%H:%M')
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid date (YYYY-MM-DD) and time (HH:MM)")
+            return
+
+        # Get IDs from names
+        patient_id = int(patient.split()[0])
+        doctor_id = int(doctor.split()[0])
+
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute('''UPDATE appointments 
+                    SET patient_id=?, doctor_id=?, date=?, time=?, status=?
+                    WHERE id=?''', 
+                 (patient_id, doctor_id, date, time, status, appointment_id))
+        conn.commit()
+        conn.close()
+
+        self.clear_appointment_fields()
+        self.load_appointment_data()
+        messagebox.showinfo("Success", "Appointment updated successfully")
+
+    def delete_appointment(self):
+        selected = self.appointment_tree.selection()
+        if not selected:
+            messagebox.showerror("Error", "Please select an appointment to delete")
+            return
+
+        if messagebox.askyesno("Confirm", "Are you sure you want to delete this appointment?"):
+            appointment_id = self.appointment_tree.item(selected)['values'][0]
+            
+            conn = sqlite3.connect('hospital.db')
+            c = conn.cursor()
+            c.execute("DELETE FROM appointments WHERE id=?", (appointment_id,))
+            conn.commit()
+            conn.close()
+
+            self.clear_appointment_fields()
+            self.load_appointment_data()
+            messagebox.showinfo("Success", "Appointment deleted successfully")
+
+    def select_appointment(self, event):
+        selected = self.appointment_tree.selection()
+        if not selected:
+            return
+
+        # Clear current fields
+        self.clear_appointment_fields()
+
+        # Get appointment data
+        appointment_id = self.appointment_tree.item(selected)['values'][0]
+        patient_name = self.appointment_tree.item(selected)['values'][1]
+        doctor_name = self.appointment_tree.item(selected)['values'][2]
+        
+        # Fill fields with appointment data
+        self.appointment_patient.set(patient_name)
+        self.appointment_doctor.set(doctor_name)
+        self.appointment_date.insert(0, self.appointment_tree.item(selected)['values'][3])
+        self.appointment_time.insert(0, self.appointment_tree.item(selected)['values'][4])
+        self.appointment_status.set(self.appointment_tree.item(selected)['values'][5])
+
+    def load_appointment_data(self):
+        # Clear current view
+        for item in self.appointment_tree.get_children():
+            self.appointment_tree.delete(item)
+
+        # Load data from database with patient and doctor names
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        c.execute('''SELECT a.id, 
+                           p.id || ' - ' || p.name as patient_name,
+                           d.id || ' - ' || d.name as doctor_name,
+                           a.date, a.time, a.status
+                    FROM appointments a
+                    JOIN patients p ON a.patient_id = p.id
+                    JOIN doctors d ON a.doctor_id = d.id''')
+        for row in c.fetchall():
+            self.appointment_tree.insert("", "end", values=row)
+        conn.close()
+
+    def clear_appointment_fields(self):
+        self.appointment_patient.set("")
+        self.appointment_doctor.set("")
+        self.appointment_date.delete(0, tk.END)
+        self.appointment_date.insert(0, "YYYY-MM-DD")
+        self.appointment_time.delete(0, tk.END)
+        self.appointment_time.insert(0, "HH:MM")
+        self.appointment_status.set("")
+
+    def update_patient_doctor_lists(self):
+        conn = sqlite3.connect('hospital.db')
+        c = conn.cursor()
+        
+        # Update patient list
+        c.execute("SELECT id, name FROM patients")
+        patient_list = [f"{row[0]} - {row[1]}" for row in c.fetchall()]
+        self.appointment_patient['values'] = patient_list
+        
+        # Update doctor list
+        c.execute("SELECT id, name FROM doctors")
+        doctor_list = [f"{row[0]} - {row[1]}" for row in c.fetchall()]
+        self.appointment_doctor['values'] = doctor_list
+        
+        conn.close()
+
+    def validate_date(self, date_string):
+        try:
+            datetime.strptime(date_string, '%Y-%m-%d')
+            return True
+        except ValueError:
+            return False
+
+    def validate_time(self, time_string):
+        try:
+            datetime.strptime(time_string, '%H:%M')
+            return True
+        except ValueError:
+            return False
+
+    def validate_email(self, email):
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
+
+    def validate_phone(self, phone):
+        return re.match(r'^\d{10}$', phone) is not None
+
+
+
+def main():
+    root = tk.Tk()
+    app = HospitalManagementSystem(root)
+    
+    # Set window size and make it resizable
+    root.geometry("1920x1080")
+    root.minsize(1000, 600)
+    
+    # Configure grid weights for responsive layout
+    root.grid_rowconfigure(0, weight=1)
+    root.grid_columnconfigure(0, weight=1)
+    
+    # Configure theme and style
+    style = ttk.Style()
+    style.theme_use('clam')  # Keeps a modern theme
+    style.configure("TFrame", background="#e6f2ff")
+    style.configure("TLabelFrame", background="#ffffff", relief="ridge", borderwidth=0, padding=(15, 10))
+    style.configure("TEntry", relief="flat", borderwidth=1, padding=(5, 2))
+
+
+    
+    # Configure colors
+    style.configure("Treeview",
+                background="#ffffff",
+                foreground="black",
+                rowheight=30,
+                fieldbackground="#e0f7fa")
+    style.map("Treeview", background=[("selected", "#0078d7")])  # Soft blue selection color
+
+    
+    style.configure("Treeview.Heading",
+                   background="#f0f0f0",
+                   foreground="black",
+                   relief="flat")
+
+    
+    # Configure button style
+    style.configure("TButton",
+                padding=8,
+                relief="flat",
+                background="#0078D7",  # Blue color for buttons
+                foreground="#ffffff")  # White text
+    style.map("TButton", background=[("active", "#005bb5")])  # Darker blue on hover
+
+
+    # Style for Notebook tabs
+    style.configure("TNotebook", background="#e6f2ff")
+    style.configure("TNotebook.Tab", background="#ffffff", padding=(10, 5), font=("Helvetica", 10, "bold"))
+    style.map("TNotebook.Tab", background=[("selected", "#0078D7")], foreground=[("selected", "#ffffff")])
+
+
+    
+    # Start the application
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
