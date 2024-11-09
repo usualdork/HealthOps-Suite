@@ -1,0 +1,336 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import sqlite3
+from datetime import datetime
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import webbrowser
+from PIL import Image, ImageTk
+import requests
+from io import BytesIO
+
+# Initialize Database
+conn = sqlite3.connect('medicine_inventory.db')
+cursor = conn.cursor()
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS inventory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        manufacturer TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        unit_price REAL NOT NULL,
+        expiry_date TEXT NOT NULL
+    )
+''')
+conn.commit()
+
+# Advanced Features: Low stock threshold
+LOW_STOCK_THRESHOLD = 10
+
+# Predefined categories and manufacturers for dropdowns
+CATEGORIES = ['Pain Reliever', 'Antibiotic', 'Cough Syrup', 'Vitamin', 'Antiseptic']
+MANUFACTURERS = ['Pfizer', 'Johnson & Johnson', 'Merck', 'GSK', 'AstraZeneca']
+
+class InventoryApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Medicine Inventory Management System")
+        self.root.geometry("1000x650")
+        self.create_widgets()
+        self.populate_inventory()
+        self.add_github_logo()
+
+    def create_widgets(self):
+        # Notebook for tabs
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(expand=True, fill='both')
+
+        # Tabs
+        self.tab_add = ttk.Frame(self.notebook)
+        self.tab_view = ttk.Frame(self.notebook)
+        self.tab_analytics = ttk.Frame(self.notebook)
+        self.tab_settings = ttk.Frame(self.notebook)
+
+        self.notebook.add(self.tab_add, text='Add Medicine')
+        self.notebook.add(self.tab_view, text='View Inventory')
+        self.notebook.add(self.tab_analytics, text='Analytics')
+        self.notebook.add(self.tab_settings, text='Settings')
+
+        self.create_add_tab()
+        self.create_view_tab()
+        self.create_analytics_tab()
+        self.create_settings_tab()
+
+    def create_add_tab(self):
+        padding = {'padx': 10, 'pady': 10}
+
+        # Labels and Entry widgets
+        ttk.Label(self.tab_add, text="Medicine Name:").grid(row=0, column=0, sticky=tk.W, **padding)
+        self.name_entry = ttk.Entry(self.tab_add, width=30)
+        self.name_entry.grid(row=0, column=1, **padding)
+
+        ttk.Label(self.tab_add, text="Category:").grid(row=1, column=0, sticky=tk.W, **padding)
+        self.category_combo = ttk.Combobox(self.tab_add, values=CATEGORIES, state='readonly')
+        self.category_combo.grid(row=1, column=1, **padding)
+        self.category_combo.current(0)
+
+        ttk.Label(self.tab_add, text="Manufacturer:").grid(row=2, column=0, sticky=tk.W, **padding)
+        self.manufacturer_combo = ttk.Combobox(self.tab_add, values=MANUFACTURERS, state='readonly')
+        self.manufacturer_combo.grid(row=2, column=1, **padding)
+        self.manufacturer_combo.current(0)
+        ttk.Label(self.tab_add, text="Quantity:").grid(row=3, column=0, sticky=tk.W, **padding)
+        self.quantity_entry = ttk.Entry(self.tab_add, width=30)
+        self.quantity_entry.grid(row=3, column=1, **padding)
+
+        ttk.Label(self.tab_add, text="Unit Price ($):").grid(row=4, column=0, sticky=tk.W, **padding)
+        self.price_entry = ttk.Entry(self.tab_add, width=30)
+        self.price_entry.grid(row=4, column=1, **padding)
+
+        ttk.Label(self.tab_add, text="Expiry Date (YYYY-MM-DD):").grid(row=5, column=0, sticky=tk.W, **padding)
+        self.expiry_entry = ttk.Entry(self.tab_add, width=30)
+        self.expiry_entry.grid(row=5, column=1, **padding)
+
+        # Add Button
+        self.add_button = ttk.Button(self.tab_add, text="Add Medicine", command=self.add_medicine)
+        self.add_button.grid(row=6, column=0, columnspan=2, pady=20)
+
+    def create_view_tab(self):
+        padding = {'padx': 10, 'pady': 10}
+
+        # Search Bar
+        ttk.Label(self.tab_view, text="Search:").grid(row=0, column=0, sticky=tk.W, **padding)
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(self.tab_view, textvariable=self.search_var, width=30)
+        self.search_entry.grid(row=0, column=1, **padding)
+        self.search_entry.bind("<KeyRelease>", self.search_inventory)
+
+        # Treeview for inventory
+        columns = ('ID', 'Name', 'Category', 'Manufacturer', 'Quantity', 'Unit Price', 'Expiry Date')
+        self.tree = ttk.Treeview(self.tab_view, columns=columns, show='headings')
+
+        for col in columns:
+            self.tree.heading(col, text=col)
+            if col == 'Name' or col == 'Manufacturer' or col == 'Category':
+                self.tree.column(col, width=150)
+            else:
+                self.tree.column(col, width=100)
+
+        self.tree.grid(row=1, column=0, columnspan=4, sticky='nsew', padx=10, pady=10)
+
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(self.tab_view, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscroll=scrollbar.set)
+        scrollbar.grid(row=1, column=4, sticky='ns')
+
+        # Configure grid weights
+        self.tab_view.rowconfigure(1, weight=1)
+        self.tab_view.columnconfigure(3, weight=1)
+
+        # Delete Button
+        self.delete_button = ttk.Button(self.tab_view, text="Delete Selected", command=self.delete_medicine)
+        self.delete_button.grid(row=2, column=0, padx=10, pady=10, sticky=tk.W)
+
+    def create_analytics_tab(self):
+        padding = {'padx': 10, 'pady': 10}
+
+        # Button to Generate Analytics
+        self.analytics_button = ttk.Button(self.tab_analytics, text="Generate Analytics", command=self.generate_analytics)
+        self.analytics_button.pack(pady=10)
+
+        # Placeholder for charts
+        self.chart_frame = ttk.Frame(self.tab_analytics)
+        self.chart_frame.pack(fill='both', expand=True)
+
+    def create_settings_tab(self):
+        padding = {'padx': 10, 'pady': 10}
+
+        # Add Category
+        ttk.Label(self.tab_settings, text="Add New Category:").grid(row=0, column=0, sticky=tk.W, **padding)
+        self.new_category_entry = ttk.Entry(self.tab_settings, width=30)
+        self.new_category_entry.grid(row=0, column=1, **padding)
+        ttk.Button(self.tab_settings, text="Add Category", command=self.add_category).grid(row=0, column=2, **padding)
+
+        # Add Manufacturer
+        ttk.Label(self.tab_settings, text="Add New Manufacturer:").grid(row=1, column=0, sticky=tk.W, **padding)
+        self.new_manufacturer_entry = ttk.Entry(self.tab_settings, width=30)
+        self.new_manufacturer_entry.grid(row=1, column=1, **padding)
+        ttk.Button(self.tab_settings, text="Add Manufacturer", command=self.add_manufacturer).grid(row=1, column=2, **padding)
+
+        # Display current categories and manufacturers
+        ttk.Label(self.tab_settings, text="Current Categories:").grid(row=2, column=0, sticky=tk.W, **padding)
+        self.categories_listbox = tk.Listbox(self.tab_settings, width=30, height=5)
+        self.categories_listbox.grid(row=3, column=0, columnspan=2, **padding)
+
+        ttk.Label(self.tab_settings, text="Current Manufacturers:").grid(row=4, column=0, sticky=tk.W, **padding)
+        self.manufacturers_listbox = tk.Listbox(self.tab_settings, width=30, height=5)
+        self.manufacturers_listbox.grid(row=5, column=0, columnspan=2, **padding)
+
+        self.update_settings_lists()
+
+    def add_category(self):
+        new_category = self.new_category_entry.get().strip()
+        if new_category and new_category not in CATEGORIES:
+            CATEGORIES.append(new_category)
+            self.category_combo['values'] = CATEGORIES
+            self.new_category_entry.delete(0, tk.END)
+            self.update_settings_lists()
+            messagebox.showinfo("Success", f"Category '{new_category}' added successfully.")
+        else:
+            messagebox.showerror("Error", "Invalid or duplicate category.")
+
+    def add_manufacturer(self):
+        new_manufacturer = self.new_manufacturer_entry.get().strip()
+        if new_manufacturer and new_manufacturer not in MANUFACTURERS:
+            MANUFACTURERS.append(new_manufacturer)
+            self.manufacturer_combo['values'] = MANUFACTURERS
+            self.new_manufacturer_entry.delete(0, tk.END)
+            self.update_settings_lists()
+            messagebox.showinfo("Success", f"Manufacturer '{new_manufacturer}' added successfully.")
+        else:
+            messagebox.showerror("Error", "Invalid or duplicate manufacturer.")
+
+    def update_settings_lists(self):
+        self.categories_listbox.delete(0, tk.END)
+        for category in CATEGORIES:
+            self.categories_listbox.insert(tk.END, category)
+
+        self.manufacturers_listbox.delete(0, tk.END)
+        for manufacturer in MANUFACTURERS:
+            self.manufacturers_listbox.insert(tk.END, manufacturer)
+
+    def add_github_logo(self):
+        # Load GitHub logo
+        github_logo_url = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+        response = requests.get(github_logo_url)
+        img_data = Image.open(BytesIO(response.content))
+        img_data = img_data.resize((30, 30), Image.ANTIALIAS)
+        self.github_logo = ImageTk.PhotoImage(img_data)
+
+        # Create label with GitHub logo
+        github_label = tk.Label(self.root, image=self.github_logo, cursor="hand2")
+        github_label.pack(side=tk.BOTTOM, pady=10)
+        github_label.bind("<Button-1>", self.open_github_profile)
+
+    def open_github_profile(self, event):
+        # Replace 'YOUR_GITHUB_USERNAME' with your actual GitHub username
+        webbrowser.open_new("YOUR_GITHUB_USERNAME")
+
+    def add_medicine(self):
+        name = self.name_entry.get().strip()
+        category = self.category_combo.get()
+        manufacturer = self.manufacturer_combo.get()
+        quantity = self.quantity_entry.get().strip()
+        unit_price = self.price_entry.get().strip()
+        expiry_date = self.expiry_entry.get().strip()
+
+        # Validation
+        if not name or not category or not manufacturer or not quantity or not unit_price or not expiry_date:
+            messagebox.showerror("Input Error", "Please fill in all fields.")
+            return
+        try:
+            quantity = int(quantity)
+            unit_price = float(unit_price)
+            datetime.strptime(expiry_date, "%Y-%m-%d")
+        except ValueError:
+            messagebox.showerror("Input Error", "Please enter valid data types.\n- Quantity: Integer\n- Unit Price: Number\n- Expiry Date: YYYY-MM-DD")
+            return
+
+        # Insert into database
+        cursor.execute('''
+            INSERT INTO inventory (name, category, manufacturer, quantity, unit_price, expiry_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (name, category, manufacturer, quantity, unit_price, expiry_date))
+        conn.commit()
+        messagebox.showinfo("Success", f"Medicine '{name}' added successfully.")
+        self.clear_add_fields()
+        self.populate_inventory()
+
+    def clear_add_fields(self):
+        self.name_entry.delete(0, tk.END)
+        self.category_combo.set('')
+        self.manufacturer_combo.set('')
+        self.quantity_entry.delete(0, tk.END)
+        self.price_entry.delete(0, tk.END)
+        self.expiry_entry.delete(0, tk.END)
+
+    def populate_inventory(self):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+        cursor.execute("SELECT * FROM inventory")
+        for row in cursor.fetchall():
+            self.tree.insert('', tk.END, values=row)
+            # Check for low stock
+            if row[4] < LOW_STOCK_THRESHOLD:
+                messagebox.showwarning("Low Stock Alert", f"Medicine '{row[1]}' is low in stock ({row[4]} units).")
+            # Check for expiry
+            expiry = datetime.strptime(row[6], "%Y-%m-%d")
+            if expiry < datetime.now():
+                messagebox.showwarning("Expiry Alert", f"Medicine '{row[1]}' has expired on {row[6]}.")
+
+    def delete_medicine(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showerror("Selection Error", "Please select a medicine to delete.")
+            return
+        confirm = messagebox.askyesno("Confirm Delete", "Are you sure you want to delete the selected medicine?")
+        if confirm:
+            item = self.tree.item(selected_item)
+            medicine_id = item['values'][0]
+            cursor.execute("DELETE FROM inventory WHERE id=?", (medicine_id,))
+            conn.commit()
+            self.populate_inventory()
+            messagebox.showinfo("Deleted", "Medicine deleted successfully.")
+
+    def search_inventory(self, event):
+        query = self.search_var.get()
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+        cursor.execute("SELECT * FROM inventory WHERE name LIKE ? OR category LIKE ? OR manufacturer LIKE ?", 
+                       ('%'+query+'%', '%'+query+'%', '%'+query+'%'))
+        for row in cursor.fetchall():
+            self.tree.insert('', tk.END, values=row)
+
+    def generate_analytics(self):
+        # Clear previous charts
+        for widget in self.chart_frame.winfo_children():
+            widget.destroy()
+
+        cursor.execute("SELECT category, SUM(quantity) FROM inventory GROUP BY category")
+        categories = cursor.fetchall()
+        categories_names = [c[0] for c in categories]
+        categories_values = [c[1] for c in categories]
+
+        cursor.execute("SELECT name, quantity FROM inventory ORDER BY quantity DESC LIMIT 5")
+        top_medicines = cursor.fetchall()
+        top_names = [tm[0] for tm in top_medicines]
+        top_values = [tm[1] for tm in top_medicines]
+
+        fig, axs = plt.subplots(1, 2, figsize=(10,5))
+
+        # Category-wise Stock
+        axs[0].bar(categories_names, categories_values, color='skyblue')
+        axs[0].set_title('Stock by Category')
+        axs[0].set_xlabel('Category')
+        axs[0].set_ylabel('Quantity')
+        axs[0].tick_params(axis='x', rotation=45)
+
+        # Top 5 Medicines
+        axs[1].bar(top_names, top_values, color='salmon')
+        axs[1].set_title('Top 5 Medicines by Quantity')
+        axs[1].set_xlabel('Medicine')
+        axs[1].set_ylabel('Quantity')
+        axs[1].tick_params(axis='x', rotation=45)
+
+        plt.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=self.chart_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill='both', expand=True)
+
+def main():
+    root = tk.Tk()
+    app = InventoryApp(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
